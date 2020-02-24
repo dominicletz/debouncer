@@ -1,0 +1,198 @@
+defmodule Debouncer do
+  use Application
+  use GenServer
+
+  @moduledoc """
+    Debouncer executes a function call debounced. Debouncing is done one a per key basis:
+
+    ```
+      Debouncer.apply(Key, fn() -> IO.puts("Hello World, debounced") end)
+    ```
+
+    The third optional parameter is the timeout period in milliseconds
+
+    ```
+      Debouncer.apply(Key, fn() -> IO.puts("Hello World, once per minute max") end, 60_000)
+    ```
+
+    The variants supported are:
+
+    * apply      => Events are executed after the timeout
+    * immediate  => Events are executed immediately, and further events are delayed for the timeout
+    * immediate2 => Events are executed immediately, and further events are IGNORED for the timeout
+    * delay      => Each event delays the execution of the next event
+
+    ```
+    EVENT      X1---X2------X3-------X4----------
+    TIMEOUT    ----------|----------|----------|-
+    =============================================
+    apply      ----------X2---------X3---------X4
+    immediate  X1--------X2---------X3---------X4
+    immediate2 X1-----------X3-------------------
+    delay      --------------------------------X4
+    ```
+
+
+  """
+
+  def start(_type, _args) do
+    import Supervisor.Spec, warn: false
+    children = [worker(Debouncer, [])]
+    Supervisor.start_link(children, strategy: :one_for_one, name: Debouncer.Supervisor)
+  end
+
+  @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
+  def start_link() do
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  end
+
+  def init(_arg) do
+    {:ok, _} = :timer.send_interval(100, :tick)
+    __MODULE__ = :ets.new(__MODULE__, [{:keypos, 1}, :ordered_set, :named_table])
+    {:ok, %{}}
+  end
+
+  @spec immediate(term(), (() -> any()), non_neg_integer()) :: :ok
+  @doc """
+    immediate() executes the function immediately but blocks any further call
+      under the same key for the given timeout.
+  """
+  def immediate(key, fun, timeout \\ 5000) do
+    Application.ensure_started(:debouncer)
+    GenServer.cast(__MODULE__, {:immediate, key, fun, timeout})
+  end
+
+  @spec immediate2(term(), (() -> any()), non_neg_integer()) :: :ok
+  @doc """
+    immediate2() executes the function immediately but blocks any further call
+      under the same key for the given timeout.
+  """
+  def immediate2(key, fun, timeout \\ 5000) do
+    Application.ensure_started(:debouncer)
+    GenServer.cast(__MODULE__, {:immediate2, key, fun, timeout})
+  end
+
+  @spec delay(term(), (() -> any()), non_neg_integer()) :: :ok
+  @doc """
+    delay() executes the function after the specified timeout t0 + timeout,
+      when delay is called multipe times the timeout is reset based on the
+      most recent call (t1 + timeout, t2 + timeout) etc... the fun is also updated
+  """
+  def delay(key, fun, timeout \\ 5000) do
+    Application.ensure_started(:debouncer)
+    GenServer.cast(__MODULE__, {:delay, key, fun, timeout})
+  end
+
+  @spec apply(term(), (() -> any()), non_neg_integer()) :: :ok
+  @doc """
+    apply executes the function after the specified timeout t0 + timeout,
+      when apply is called multiple times it does not affect the point
+      in time when the next call is happening (t0 + timeout) but updates the fun
+  """
+  def apply(key, fun, timeout \\ 5000) do
+    Application.ensure_started(:debouncer)
+    GenServer.cast(__MODULE__, {:apply, key, fun, timeout})
+  end
+
+  def handle_cast({:delay, key, fun, timeout}, state) do
+    calltime = time() + timeout
+    ets_insert(calltime, key)
+    {:noreply, Map.put(state, key, {calltime, fun})}
+  end
+
+  def handle_cast({:apply, key, fun, timeout}, state) do
+    case Map.get(state, key) do
+      nil -> handle_cast({:delay, key, fun, timeout}, state)
+      {calltime, _fun} -> {:noreply, Map.put(state, key, {calltime, fun})}
+    end
+  end
+
+  def handle_cast({:immediate, key, fun, timeout}, state) do
+    case Map.get(state, key) do
+      nil ->
+        execute(fun)
+        calltime = time() + timeout
+        ets_insert(calltime, key)
+        {:noreply, Map.put(state, key, {calltime, nil, timeout})}
+
+      {calltime, _fun, _timeout} ->
+        {:noreply, Map.put(state, key, {calltime, fun, timeout})}
+    end
+  end
+
+  def handle_cast({:immediate2, key, fun, timeout}, state) do
+    case Map.get(state, key) do
+      nil ->
+        execute(fun)
+        calltime = time() + timeout
+        ets_insert(calltime, key)
+        {:noreply, Map.put(state, key, {calltime, nil, timeout})}
+
+      {calltime, _fun, _timeout} ->
+        {:noreply, Map.put(state, key, {calltime, nil, timeout})}
+    end
+  end
+
+  defp ets_insert(calltime, key) do
+    case :ets.lookup(__MODULE__, calltime) do
+      [] -> :ets.insert(__MODULE__, {calltime, [key]})
+      [{_, keys}] -> :ets.insert(__MODULE__, {calltime, [key | keys]})
+    end
+  end
+
+  def handle_info(:tick, state) do
+    {:noreply, update(state, time())}
+  end
+
+  defp update(state, now) do
+    case :ets.first(__MODULE__) do
+      :"$end_of_table" ->
+        state
+
+      ts when ts > now ->
+        state
+
+      ts ->
+        state =
+          hd(:ets.lookup(__MODULE__, ts))
+          |> elem(1)
+          |> Enum.reduce(state, fn key, state ->
+            case Map.get(state, key) do
+              # Handling muting of immediate*
+              {^ts, nil, _timeout} ->
+                Map.delete(state, key)
+
+              # Handling muting of immediate*
+              {^ts, fun, timeout} ->
+                execute(fun)
+                calltime = ts + timeout
+                ets_insert(calltime, key)
+                Map.put(state, key, {calltime, nil, timeout})
+
+              # Apply and delay go here
+              {^ts, fun} ->
+                execute(fun)
+                Map.delete(state, key)
+
+              _ ->
+                state
+            end
+          end)
+
+        :ets.delete(__MODULE__, ts)
+        update(state, now)
+    end
+  end
+
+  defp execute(nil) do
+    :ok
+  end
+
+  defp execute(fun) do
+    spawn(fun)
+  end
+
+  defp time() do
+    System.monotonic_time(:millisecond)
+  end
+end
