@@ -1,4 +1,4 @@
-# Debouncer
+# Debouncer [![Build Status](https://travis-ci.com/dominicletz/debouncer.svg?branch=master)](https://travis-ci.com/dominicletz/debouncer)
 
 Debouncer module to reduce frequency of function calls to alerts, updates and similar. It supports four different modes:
 

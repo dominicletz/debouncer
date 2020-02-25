@@ -5,7 +5,7 @@ defmodule Debouncer.MixProject do
     [
       app: :debouncer,
       version: "0.1.1",
-      elixir: "~> 1.10",
+      elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
