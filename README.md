@@ -59,7 +59,7 @@ The debouncer can be installed by adding `debouncer` to your list of dependencie
 ```elixir
 def deps do
   [
-    {:debouncer, "~> 0.1.0"}
+    {:debouncer, "~> 0.1"}
   ]
 end
 ```
