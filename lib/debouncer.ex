@@ -17,19 +17,19 @@ defmodule Debouncer do
 
     The variants supported are:
 
-    * apply      => Events are executed after the timeout
-    * immediate  => Events are executed immediately, and further events are delayed for the timeout
-    * immediate2 => Events are executed immediately, and further events are IGNORED for the timeout
-    * delay      => Each event delays the execution of the next event
+    * apply()      => Events are executed after the timeout
+    * immediate()  => Events are executed immediately, and further events are delayed for the timeout
+    * immediate2() => Events are executed immediately, and further events are IGNORED for the timeout
+    * delay()      => Each event delays the execution of the next event
 
     ```
-    EVENT      X1---X2------X3-------X4----------
-    TIMEOUT    ----------|----------|----------|-
-    =============================================
-    apply      ----------X2---------X3---------X4
-    immediate  X1--------X2---------X3---------X4
-    immediate2 X1-----------X3-------------------
-    delay      --------------------------------X4
+    EVENT        X1---X2------X3-------X4----------
+    TIMEOUT      ----------|----------|----------|-
+    ===============================================
+    apply()      ----------X2---------X3---------X4
+    immediate()  X1--------X2---------X3---------X4
+    immediate2() X1-----------X3-------------------
+    delay()      --------------------------------X4
     ```
 
 
@@ -58,8 +58,18 @@ defmodule Debouncer do
       under the same key for the given timeout.
   """
   def immediate(key, fun, timeout \\ 5000) do
-    Application.ensure_started(:debouncer)
-    GenServer.cast(__MODULE__, {:immediate, key, fun, timeout})
+    do_cast(fn state ->
+      case Map.get(state, key) do
+        nil ->
+          execute(fun)
+          calltime = time() + timeout
+          ets_insert(calltime, key)
+          Map.put(state, key, {calltime, nil, timeout})
+
+        {calltime, _fun, _timeout} ->
+          Map.put(state, key, {calltime, fun, timeout})
+      end
+    end)
   end
 
   @spec immediate2(term(), (() -> any()), non_neg_integer()) :: :ok
@@ -68,8 +78,18 @@ defmodule Debouncer do
       under the same key for the given timeout.
   """
   def immediate2(key, fun, timeout \\ 5000) do
-    Application.ensure_started(:debouncer)
-    GenServer.cast(__MODULE__, {:immediate2, key, fun, timeout})
+    do_cast(fn state ->
+      case Map.get(state, key) do
+        nil ->
+          execute(fun)
+          calltime = time() + timeout
+          ets_insert(calltime, key)
+          Map.put(state, key, {calltime, nil, timeout})
+
+        {calltime, _fun, _timeout} ->
+          Map.put(state, key, {calltime, nil, timeout})
+      end
+    end)
   end
 
   @spec delay(term(), (() -> any()), non_neg_integer()) :: :ok
@@ -79,58 +99,61 @@ defmodule Debouncer do
       most recent call (t1 + timeout, t2 + timeout) etc... the fun is also updated
   """
   def delay(key, fun, timeout \\ 5000) do
-    Application.ensure_started(:debouncer)
-    GenServer.cast(__MODULE__, {:delay, key, fun, timeout})
+    do_cast(fn state ->
+      calltime = time() + timeout
+      ets_insert(calltime, key)
+      Map.put(state, key, {calltime, fun})
+    end)
   end
 
   @spec apply(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
-    apply executes the function after the specified timeout t0 + timeout,
+    apply() executes the function after the specified timeout t0 + timeout,
       when apply is called multiple times it does not affect the point
       in time when the next call is happening (t0 + timeout) but updates the fun
   """
   def apply(key, fun, timeout \\ 5000) do
+    do_cast(fn state ->
+      case Map.get(state, key) do
+        nil ->
+          calltime = time() + timeout
+          ets_insert(calltime, key)
+          Map.put(state, key, {calltime, fun, timeout})
+
+        {calltime, _fun, timeout} ->
+          Map.put(state, key, {calltime, fun, timeout})
+      end
+    end)
+  end
+
+  @spec cancel(term()) :: :ok
+  @doc """
+    cancel() deletes the latest event if it hasn't triggered yet.
+  """
+  def cancel(key) do
+    do_cast(fn state ->
+      case Map.get(state, key) do
+        nil ->
+          state
+
+        {calltime, _fun} ->
+          Map.put(state, key, {calltime, nil})
+
+        {calltime, _fun, timeout} ->
+          Map.put(state, key, {calltime, nil, timeout})
+      end
+    end)
+  end
+
+  ######################## INTERNAL METHOD ####################
+
+  defp do_cast(fun) do
     Application.ensure_started(:debouncer)
-    GenServer.cast(__MODULE__, {:apply, key, fun, timeout})
+    GenServer.cast(__MODULE__, fun)
   end
 
-  def handle_cast({:delay, key, fun, timeout}, state) do
-    calltime = time() + timeout
-    ets_insert(calltime, key)
-    {:noreply, Map.put(state, key, {calltime, fun})}
-  end
-
-  def handle_cast({:apply, key, fun, timeout}, state) do
-    case Map.get(state, key) do
-      nil -> handle_cast({:delay, key, fun, timeout}, state)
-      {calltime, _fun} -> {:noreply, Map.put(state, key, {calltime, fun})}
-    end
-  end
-
-  def handle_cast({:immediate, key, fun, timeout}, state) do
-    case Map.get(state, key) do
-      nil ->
-        execute(fun)
-        calltime = time() + timeout
-        ets_insert(calltime, key)
-        {:noreply, Map.put(state, key, {calltime, nil, timeout})}
-
-      {calltime, _fun, _timeout} ->
-        {:noreply, Map.put(state, key, {calltime, fun, timeout})}
-    end
-  end
-
-  def handle_cast({:immediate2, key, fun, timeout}, state) do
-    case Map.get(state, key) do
-      nil ->
-        execute(fun)
-        calltime = time() + timeout
-        ets_insert(calltime, key)
-        {:noreply, Map.put(state, key, {calltime, nil, timeout})}
-
-      {calltime, _fun, _timeout} ->
-        {:noreply, Map.put(state, key, {calltime, nil, timeout})}
-    end
+  def handle_cast(fun, state) do
+    {:noreply, fun.(state)}
   end
 
   defp ets_insert(calltime, key) do
@@ -158,18 +181,18 @@ defmodule Debouncer do
           |> elem(1)
           |> Enum.reduce(state, fn key, state ->
             case Map.get(state, key) do
-              # Handling muting of immediate*
+              # Handling apply(), immediate(), immediate2()
               {^ts, nil, _timeout} ->
                 Map.delete(state, key)
 
-              # Handling muting of immediate*
+              # Executing and putting marker for next event
               {^ts, fun, timeout} ->
                 execute(fun)
                 calltime = ts + timeout
                 ets_insert(calltime, key)
                 Map.put(state, key, {calltime, nil, timeout})
 
-              # Apply and delay go here
+              # delay() goes here
               {^ts, fun} ->
                 execute(fun)
                 Map.delete(state, key)

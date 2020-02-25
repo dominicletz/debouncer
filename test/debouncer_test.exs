@@ -22,6 +22,47 @@ defmodule DebouncerTest do
     num
   end
 
+  def readme(fun) do
+    key = reset()
+    fun.(key, fn -> incr(1) end, 1000)
+    Process.sleep(500)
+    fun.(key, fn -> incr(2) end, 1000)
+    Process.sleep(800)
+    fun.(key, fn -> incr(3) end, 1000)
+    Process.sleep(900)
+    fun.(key, fn -> incr(4) end, 1000)
+    Process.sleep(1200)
+    get()
+  end
+
+  test "example from the readme" do
+    assert readme(&Debouncer.apply/3) == 2 + 3 + 4
+    assert readme(&Debouncer.immediate/3) == 1 + 2 + 3 + 4
+    assert readme(&Debouncer.immediate2/3) == 1 + 3
+    assert readme(&Debouncer.delay/3) == 4
+  end
+
+  def cancel(fun) do
+    key = reset()
+    fun.(key, fn -> incr(1) end, 1000)
+    Process.sleep(500)
+    fun.(key, fn -> incr(2) end, 1000)
+    Process.sleep(800)
+    fun.(key, fn -> incr(3) end, 1000)
+    Process.sleep(900)
+    fun.(key, fn -> incr(4) end, 1000)
+    Debouncer.cancel(key)
+    Process.sleep(1200)
+    get()
+  end
+
+  test "example from the readme + delete" do
+    assert cancel(&Debouncer.apply/3) == 2 + 3
+    assert cancel(&Debouncer.immediate/3) == 1 + 2 + 3
+    assert cancel(&Debouncer.immediate2/3) == 1 + 3
+    assert cancel(&Debouncer.delay/3) == 0
+  end
+
   def debounce(fun) do
     key = reset()
     fun.(key, fn -> incr(1) end, @timeout)
@@ -60,10 +101,10 @@ defmodule DebouncerTest do
     assert once(&Debouncer.immediate2/3) == 1
   end
 
-
   # Ten events each with a small 100ms pause
   def ten_pauses(fun) do
     key = reset()
+
     for _ <- 1..10 do
       fun.(key, fn -> incr(3) end, @timeout)
       Process.sleep(100)
@@ -84,6 +125,5 @@ defmodule DebouncerTest do
 
     # Immediate2 triggers three times
     assert ten_pauses(&Debouncer.immediate2/3) == 6
-
   end
 end
