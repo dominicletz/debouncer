@@ -35,23 +35,6 @@ defmodule Debouncer do
 
   """
 
-  def start(_type, _args) do
-    import Supervisor.Spec, warn: false
-    children = [worker(Debouncer, [])]
-    Supervisor.start_link(children, strategy: :one_for_one, name: Debouncer.Supervisor)
-  end
-
-  @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
-  def start_link() do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
-  end
-
-  def init(_arg) do
-    {:ok, _} = :timer.send_interval(100, :tick)
-    __MODULE__ = :ets.new(__MODULE__, [{:keypos, 1}, :ordered_set, :named_table])
-    {:ok, %{}}
-  end
-
   @spec immediate(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
     immediate() executes the function immediately but blocks any further call
@@ -145,8 +128,28 @@ defmodule Debouncer do
     end)
   end
 
-  ######################## INTERNAL METHOD ####################
+  ######################## CALLBACKS       ####################
+  @doc false
+  def start(_type, _args) do
+    import Supervisor.Spec, warn: false
+    children = [worker(Debouncer, [])]
+    Supervisor.start_link(children, strategy: :one_for_one, name: Debouncer.Supervisor)
+  end
 
+  @doc false
+  @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
+  def start_link() do
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  end
+
+  @doc false
+  def init(_arg) do
+    {:ok, _} = :timer.send_interval(100, :tick)
+    __MODULE__ = :ets.new(__MODULE__, [{:keypos, 1}, :ordered_set, :named_table])
+    {:ok, %{}}
+  end
+
+  ######################## INTERNAL METHOD ####################
   defp do_cast(fun) do
     Application.ensure_started(:debouncer)
     GenServer.cast(__MODULE__, fun)
