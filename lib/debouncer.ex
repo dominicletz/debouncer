@@ -151,7 +151,6 @@ defmodule Debouncer do
 
   ######################## INTERNAL METHOD ####################
   defp do_cast(fun) do
-    Application.ensure_started(:debouncer)
     GenServer.cast(__MODULE__, fun)
   end
 
