@@ -179,7 +179,7 @@ defmodule Debouncer do
 
       ts ->
         state =
-          hd(:ets.lookup(__MODULE__, ts))
+          hd(:ets.take(__MODULE__, ts))
           |> elem(1)
           |> Enum.reduce(state, fn key, state ->
             case Map.get(state, key) do
@@ -204,7 +204,6 @@ defmodule Debouncer do
             end
           end)
 
-        :ets.delete(__MODULE__, ts)
         update(state, now)
     end
   end
