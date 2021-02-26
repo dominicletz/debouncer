@@ -132,8 +132,13 @@ defmodule Debouncer do
   @doc false
   def start(_type, _args) do
     import Supervisor.Spec, warn: false
-    children = [worker(Debouncer, [])]
-    Supervisor.start_link(children, strategy: :one_for_one, name: Debouncer.Supervisor)
+
+    child = %{
+      id: Debouncer,
+      start: {Debouncer, :start_link, []}
+    }
+
+    Supervisor.start_link([child], strategy: :one_for_one, name: Debouncer.Supervisor)
   end
 
   @doc false
