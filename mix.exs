@@ -12,7 +12,7 @@ defmodule Debouncer.MixProject do
       # Hex
       description: "Debouncer is a flexible function call debouncer.",
       package: [
-        licenses: ["Apache 2.0"],
+        licenses: ["Apache-2.0"],
         maintainers: ["Dominic Letz"],
         links: %{"GitHub" => "https://github.com/dominicletz/debouncer"}
       ],
