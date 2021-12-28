@@ -35,22 +35,23 @@ defmodule Debouncer do
 
   """
 
+  defstruct events: %{}, workers: %{}
+
   @spec immediate(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
     immediate() executes the function immediately but blocks any further call
       under the same key for the given timeout.
   """
-  def immediate(key, fun, timeout \\ 5000) do
-    do_cast(fn state ->
-      case Map.get(state, key) do
+  def immediate(key, fun, timeout \\ 5000) when is_integer(timeout) do
+    do_cast(fn deb = %Debouncer{events: events} ->
+      case Map.get(events, key) do
         nil ->
-          execute(fun)
-          calltime = time() + timeout
-          ets_insert(calltime, key)
-          Map.put(state, key, {calltime, nil, timeout})
+          new_event(deb, key, nil, timeout, timeout)
+          |> execute(key, fun)
 
         {calltime, _fun, _timeout} ->
-          Map.put(state, key, {calltime, fun, timeout})
+          events = Map.put(events, key, {calltime, fun, timeout})
+          %Debouncer{deb | events: events}
       end
     end)
   end
@@ -60,17 +61,16 @@ defmodule Debouncer do
     immediate2() executes the function immediately but blocks any further call
       under the same key for the given timeout.
   """
-  def immediate2(key, fun, timeout \\ 5000) do
-    do_cast(fn state ->
-      case Map.get(state, key) do
+  def immediate2(key, fun, timeout \\ 5000) when is_integer(timeout) do
+    do_cast(fn deb = %Debouncer{events: events} ->
+      case Map.get(events, key) do
         nil ->
-          execute(fun)
-          calltime = time() + timeout
-          ets_insert(calltime, key)
-          Map.put(state, key, {calltime, nil, timeout})
+          new_event(deb, key, nil, timeout, timeout)
+          |> execute(key, fun)
 
         {calltime, _fun, _timeout} ->
-          Map.put(state, key, {calltime, nil, timeout})
+          events = Map.put(events, key, {calltime, nil, timeout})
+          %Debouncer{deb | events: events}
       end
     end)
   end
@@ -81,11 +81,9 @@ defmodule Debouncer do
       when delay is called multipe times the timeout is reset based on the
       most recent call (t1 + timeout, t2 + timeout) etc... the fun is also updated
   """
-  def delay(key, fun, timeout \\ 5000) do
-    do_cast(fn state ->
-      calltime = time() + timeout
-      ets_insert(calltime, key)
-      Map.put(state, key, {calltime, fun})
+  def delay(key, fun, timeout \\ 5000) when is_integer(timeout) do
+    do_cast(fn deb ->
+      new_event(deb, key, fun, timeout, nil)
     end)
   end
 
@@ -95,18 +93,24 @@ defmodule Debouncer do
       when apply is called multiple times it does not affect the point
       in time when the next call is happening (t0 + timeout) but updates the fun
   """
-  def apply(key, fun, timeout \\ 5000) do
-    do_cast(fn state ->
-      case Map.get(state, key) do
+  def apply(key, fun, timeout \\ 5000) when is_integer(timeout) do
+    do_cast(fn deb = %Debouncer{events: events} ->
+      case Map.get(events, key) do
         nil ->
-          calltime = time() + timeout
-          ets_insert(calltime, key)
-          Map.put(state, key, {calltime, fun, timeout})
+          new_event(deb, key, fun, timeout, timeout)
 
         {calltime, _fun, timeout} ->
-          Map.put(state, key, {calltime, fun, timeout})
+          events = Map.put(events, key, {calltime, fun, timeout})
+          %Debouncer{deb | events: events}
       end
     end)
+  end
+
+  defp new_event(deb = %Debouncer{events: events}, key, fun, timeout, stall) do
+    calltime = time() + timeout
+    ets_insert(calltime, key)
+    events = Map.put(events, key, {calltime, fun, stall})
+    %Debouncer{deb | events: events}
   end
 
   @spec cancel(term()) :: :ok
@@ -114,16 +118,14 @@ defmodule Debouncer do
     cancel() deletes the latest event if it hasn't triggered yet.
   """
   def cancel(key) do
-    do_cast(fn state ->
-      case Map.get(state, key) do
+    do_cast(fn deb = %Debouncer{events: events} ->
+      case Map.get(events, key) do
         nil ->
-          state
-
-        {calltime, _fun} ->
-          Map.put(state, key, {calltime, nil})
+          deb
 
         {calltime, _fun, timeout} ->
-          Map.put(state, key, {calltime, nil, timeout})
+          events = Map.put(events, key, {calltime, nil, timeout})
+          %Debouncer{deb | events: events}
       end
     end)
   end
@@ -151,7 +153,7 @@ defmodule Debouncer do
   def init(_arg) do
     {:ok, _} = :timer.send_interval(100, :tick)
     __MODULE__ = :ets.new(__MODULE__, [{:keypos, 1}, :ordered_set, :named_table])
-    {:ok, %{}}
+    {:ok, %Debouncer{}}
   end
 
   ######################## INTERNAL METHOD ####################
@@ -170,55 +172,84 @@ defmodule Debouncer do
     end
   end
 
-  def handle_info(:tick, state) do
-    {:noreply, update(state, time())}
+  def handle_info(:tick, deb) do
+    {:noreply, update(deb, time())}
   end
 
-  defp update(state, now) do
-    case :ets.first(__MODULE__) do
-      :"$end_of_table" ->
-        state
+  def handle_info({:DOWN, _ref, :process, end_pid, _reason}, deb = %Debouncer{workers: workers}) do
+    case Enum.find(workers, fn {_key, {pid, _fun}} -> pid == end_pid end) do
+      nil ->
+        {:noreply, deb}
 
-      ts when ts > now ->
-        state
+      {key, {_pid, fun}} ->
+        # Process.monitor() is only called when the next call is already pending. So from
+        # {:DOWN, ...} coming in we know there needs to be another call
 
-      ts ->
-        state =
-          hd(:ets.take(__MODULE__, ts))
-          |> elem(1)
-          |> Enum.reduce(state, fn key, state ->
-            case Map.get(state, key) do
-              # Handling apply(), immediate(), immediate2()
-              {^ts, nil, _timeout} ->
-                Map.delete(state, key)
-
-              # Executing and putting marker for next event
-              {^ts, fun, timeout} ->
-                execute(fun)
-                calltime = ts + timeout
-                ets_insert(calltime, key)
-                Map.put(state, key, {calltime, nil, timeout})
-
-              # delay() goes here
-              {^ts, fun} ->
-                execute(fun)
-                Map.delete(state, key)
-
-              _ ->
-                state
-            end
-          end)
-
-        update(state, now)
+        workers = Map.delete(workers, key)
+        deb = execute(%Debouncer{deb | workers: workers}, key, fun)
+        {:noreply, deb}
     end
   end
 
-  defp execute(nil) do
-    :ok
+  defp update(deb, now) do
+    case :ets.first(__MODULE__) do
+      :"$end_of_table" ->
+        deb
+
+      ts when ts > now ->
+        deb
+
+      ts ->
+        hd(:ets.take(__MODULE__, ts))
+        |> elem(1)
+        |> Enum.reduce(deb, fn key, deb = %Debouncer{events: events} ->
+          case Map.get(events, key) do
+            # Handling apply(), immediate(), immediate2()
+            {^ts, nil, _timeout} ->
+              events = Map.delete(events, key)
+              %Debouncer{deb | events: events}
+
+            # Executing and putting marker for next event
+            {^ts, fun, timeout} when is_integer(timeout) ->
+              calltime = ts + timeout
+              ets_insert(calltime, key)
+              events = Map.put(events, key, {calltime, nil, timeout})
+
+              %Debouncer{deb | events: events}
+              |> execute(key, fun)
+
+            # delay() goes here
+            {^ts, fun, nil} ->
+              events = Map.delete(events, key)
+
+              %Debouncer{deb | events: events}
+              |> execute(key, fun)
+
+            _ ->
+              deb
+          end
+        end)
+        |> update(now)
+    end
   end
 
-  defp execute(fun) do
-    spawn(fun)
+  defp execute(deb, _key, nil) do
+    deb
+  end
+
+  defp execute(deb = %Debouncer{workers: workers}, key, fun) do
+    worker =
+      case Map.get(workers, key) do
+        nil ->
+          {spawn(fun), fun}
+
+        {pid, _fun} ->
+          # Execute this after the current job finishes
+          Process.monitor(pid)
+          {pid, fun}
+      end
+
+    %Debouncer{deb | workers: Map.put(workers, key, worker)}
   end
 
   defp time() do

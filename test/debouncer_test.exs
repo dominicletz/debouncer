@@ -101,6 +101,38 @@ defmodule DebouncerTest do
     assert once(&Debouncer.immediate2/3) == 1
   end
 
+  ## Simplest case: We fire 1 event and wait
+  def overlapp(fun) do
+    key = reset()
+
+    fun.(
+      key,
+      fn ->
+        incr(1)
+        Process.sleep(4 * @timeout)
+      end,
+      @timeout
+    )
+
+    # This should not have an effect, because the previous call
+    # did not finish yet
+    Process.sleep(@timeout + @pause)
+    fun.(key, fn -> incr(1) end, @timeout)
+    Process.sleep(@pause)
+
+    ret = get()
+    Process.sleep(3 * @timeout)
+    ret
+  end
+
+  test "1 overlapp()" do
+    # all behave the same here
+    assert overlapp(&Debouncer.apply/3) == 1
+    assert overlapp(&Debouncer.delay/3) == 1
+    assert overlapp(&Debouncer.immediate/3) == 1
+    assert overlapp(&Debouncer.immediate2/3) == 1
+  end
+
   # Ten events each with a small 100ms pause
   def ten_pauses(fun) do
     key = reset()
