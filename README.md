@@ -2,20 +2,20 @@
 
 Debouncer module to reduce frequency of function calls to alerts, updates and similar. It supports four different modes:
 
-* apply()      - For delayed triggers, e.g. to trigger an __autocomplete__ action
-* immediate()  - For reducing frequency of events, the first event per intervall is delivered immediately, e.g. trigger __data processing tasks__ 
-* immediate2() - Similiar to immediate but never delays events, either forwards them or ignores them, e.g. to trigger __alert emails__ 
-* delay()      - Only triggers an event after the timeout period, any further event delays the trigger. E.g. to detect data streams that __ended actvitiy__ 
+* `apply()`      - For delayed triggers, e.g. to trigger an __autocomplete__ action
+* `immediate()`  - For reducing frequency of events, the first event per interval is delivered immediately, e.g. trigger __data processing tasks__ 
+* `immediate2()` - Similiar to immediate but never delays events, either forwards them or ignores them, e.g. to trigger __alert emails__ 
+* `delay()`      - Only triggers an event after the timeout period, any further event delays the trigger. E.g. to detect data streams that __ended actvitiy__ 
 
 ## Usage Example
 
-```
+```elixir
   Debouncer.apply(SomeKey, fn() -> 
     IO.puts("Hello World, debounced will appear in 5 seconds") 
   end)
 ```
 
-```
+```elixir
   Debouncer.immediate(OtherKey, fn() -> 
     IO.puts("Hello World, will appear immediate, but not again within 5 seconds") 
   end)
