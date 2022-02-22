@@ -3,44 +3,42 @@ defmodule Debouncer do
   use GenServer
 
   @moduledoc """
-    Debouncer executes a function call debounced. Debouncing is done one a per key basis:
+  Debouncer executes a function call debounced. Debouncing is done one a per key basis:
 
-    ```
-      Debouncer.apply(Key, fn() -> IO.puts("Hello World, debounced") end)
-    ```
+  ```
+  Debouncer.apply(Key, fn() -> IO.puts("Hello World, debounced") end)
+  ```
 
-    The third optional parameter is the timeout period in milliseconds
+  The third optional parameter is the timeout period in milliseconds
 
-    ```
-      Debouncer.apply(Key, fn() -> IO.puts("Hello World, once per minute max") end, 60_000)
-    ```
+  ```
+  Debouncer.apply(Key, fn() -> IO.puts("Hello World, once per minute max") end, 60_000)
+  ```
 
-    The variants supported are:
+  The variants supported are:
 
-    * apply()      => Events are executed after the timeout
-    * immediate()  => Events are executed immediately, and further events are delayed for the timeout
-    * immediate2() => Events are executed immediately, and further events are IGNORED for the timeout
-    * delay()      => Each event delays the execution of the next event
+  * `apply/3`      => Events are executed after the timeout
+  * `immediate/3`  => Events are executed immediately, and further events are delayed for the timeout
+  * `immediate2/3` => Events are executed immediately, and further events are IGNORED for the timeout
+  * `delay/3`      => Each event delays the execution of the next event
 
-    ```
-    EVENT        X1---X2------X3-------X4----------
-    TIMEOUT      ----------|----------|----------|-
-    ===============================================
-    apply()      ----------X2---------X3---------X4
-    immediate()  X1--------X2---------X3---------X4
-    immediate2() X1-----------X3-------------------
-    delay()      --------------------------------X4
-    ```
-
-
+  ```
+  EVENT        X1---X2------X3-------X4----------
+  TIMEOUT      ----------|----------|----------|-
+  ===============================================
+  apply()      ----------X2---------X3---------X4
+  immediate()  X1--------X2---------X3---------X4
+  immediate2() X1-----------X3-------------------
+  delay()      --------------------------------X4
+  ```
   """
 
   defstruct events: %{}, workers: %{}
 
   @spec immediate(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
-    immediate() executes the function immediately but blocks any further call
-      under the same key for the given timeout.
+  Executes the function immediately but blocks any further call
+  under the same key for the given timeout.
   """
   def immediate(key, fun, timeout \\ 5000) when is_integer(timeout) do
     do_cast(fn deb = %Debouncer{events: events} ->
@@ -58,8 +56,8 @@ defmodule Debouncer do
 
   @spec immediate2(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
-    immediate2() executes the function immediately but blocks any further call
-      under the same key for the given timeout.
+  Executes the function immediately but ignores further calls
+  under the same key for the given timeout.
   """
   def immediate2(key, fun, timeout \\ 5000) when is_integer(timeout) do
     do_cast(fn deb = %Debouncer{events: events} ->
@@ -77,9 +75,9 @@ defmodule Debouncer do
 
   @spec delay(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
-    delay() executes the function after the specified timeout t0 + timeout,
-      when delay is called multipe times the timeout is reset based on the
-      most recent call (t1 + timeout, t2 + timeout) etc... the fun is also updated
+  Executes the function after the specified timeout t0 + timeout,
+  when delay is called multipe times the timeout is reset based on the
+  most recent call (t1 + timeout, t2 + timeout) etc... the fun is also updated
   """
   def delay(key, fun, timeout \\ 5000) when is_integer(timeout) do
     do_cast(fn deb ->
@@ -89,9 +87,9 @@ defmodule Debouncer do
 
   @spec apply(term(), (() -> any()), non_neg_integer()) :: :ok
   @doc """
-    apply() executes the function after the specified timeout t0 + timeout,
-      when apply is called multiple times it does not affect the point
-      in time when the next call is happening (t0 + timeout) but updates the fun
+  Executes the function after the specified timeout t0 + timeout,
+  when apply is called multiple times it does not affect the point
+  in time when the next call is happening (t0 + timeout) but updates the fun
   """
   def apply(key, fun, timeout \\ 5000) when is_integer(timeout) do
     do_cast(fn deb = %Debouncer{events: events} ->
@@ -115,7 +113,7 @@ defmodule Debouncer do
 
   @spec cancel(term()) :: :ok
   @doc """
-    cancel() deletes the latest event if it hasn't triggered yet.
+  Deletes the latest event if it hasn't triggered yet.
   """
   def cancel(key) do
     do_cast(fn deb = %Debouncer{events: events} ->
