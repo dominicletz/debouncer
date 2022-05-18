@@ -175,8 +175,15 @@ defmodule Debouncer do
   end
 
   def handle_info({:DOWN, _ref, :process, end_pid, _reason}, deb = %Debouncer{workers: workers}) do
-    {key, {_pid, fun, repeat?}} = Enum.find(workers, fn {_key, {pid, _fun, _repeat?}} -> pid == end_pid end)
+    {key, {_pid, fun, repeat?}} =
+      Enum.find(workers, fn {_key, {pid, _fun, _repeat?}} -> pid == end_pid end)
+
     workers = Map.delete(workers, key)
+
+    if map_size(workers) == 0 do
+      :erlang.garbage_collect()
+    end
+
     deb = %Debouncer{deb | workers: workers}
 
     if repeat? do
