@@ -175,17 +175,14 @@ defmodule Debouncer do
   end
 
   def handle_info({:DOWN, _ref, :process, end_pid, _reason}, deb = %Debouncer{workers: workers}) do
-    case Enum.find(workers, fn {_key, {pid, _fun}} -> pid == end_pid end) do
-      nil ->
-        {:noreply, deb}
+    {key, {_pid, fun, repeat?}} = Enum.find(workers, fn {_key, {pid, _fun, _repeat?}} -> pid == end_pid end)
+    workers = Map.delete(workers, key)
+    deb = %Debouncer{deb | workers: workers}
 
-      {key, {_pid, fun}} ->
-        # Process.monitor() is only called when the next call is already pending. So from
-        # {:DOWN, ...} coming in we know there needs to be another call
-
-        workers = Map.delete(workers, key)
-        deb = execute(%Debouncer{deb | workers: workers}, key, fun)
-        {:noreply, deb}
+    if repeat? do
+      {:noreply, execute(deb, key, fun)}
+    else
+      {:noreply, deb}
     end
   end
 
@@ -239,12 +236,13 @@ defmodule Debouncer do
     worker =
       case Map.get(workers, key) do
         nil ->
-          {spawn(fun), fun}
-
-        {pid, _fun} ->
-          # Execute this after the current job finishes
+          pid = spawn(fun)
           Process.monitor(pid)
-          {pid, fun}
+          {pid, fun, false}
+
+        {pid, _fun, _repeat?} ->
+          # Execute this after the current job finishes
+          {pid, fun, true}
       end
 
     %Debouncer{deb | workers: Map.put(workers, key, worker)}
