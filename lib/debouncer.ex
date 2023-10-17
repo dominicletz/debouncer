@@ -128,6 +128,15 @@ defmodule Debouncer do
     end)
   end
 
+  @spec worker(any()) :: pid() | nil
+  @doc """
+  Returns the pid of an active job worker or nil if no such job is scheduled.
+  Per key the debouncer never starts more than one process at the same time.
+  """
+  def worker(key) do
+    GenServer.call(__MODULE__, {:worker, key})
+  end
+
   ######################## CALLBACKS       ####################
   @doc false
   def start(_type, _args) do
@@ -161,6 +170,16 @@ defmodule Debouncer do
 
   def handle_cast(fun, state) do
     {:noreply, fun.(state)}
+  end
+
+  def handle_call({:worker, key}, _from, state = %Debouncer{workers: workers}) do
+    case Map.get(workers, key) do
+      nil ->
+        {:reply, nil, state}
+
+      {pid, _fun, _repeat?} ->
+        {:reply, pid, state}
+    end
   end
 
   defp ets_insert(calltime, key) do

@@ -158,4 +158,22 @@ defmodule DebouncerTest do
     # Immediate2 triggers three times
     assert ten_pauses(&Debouncer.immediate2/3) == 6
   end
+
+  test "worker" do
+    here = self()
+
+    Debouncer.immediate(:some_job, fn ->
+      send(here, :start)
+
+      receive do
+        :run -> :ok
+      end
+
+      send(here, :finish)
+    end)
+
+    assert_receive :start
+    send(Debouncer.worker(:some_job), :run)
+    assert_receive :finish
+  end
 end
