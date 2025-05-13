@@ -40,7 +40,9 @@ defmodule Debouncer do
   Executes the function immediately but blocks any further call
   under the same key for the given timeout.
   """
-  def immediate(key, fun, timeout \\ 5000) when is_integer(timeout) do
+  def immediate(key, fun \\ nil, timeout \\ 5000) when is_integer(timeout) do
+    {fun, timeout} = ensure_function(key, fun, timeout)
+
     do_cast(fn deb = %Debouncer{events: events} ->
       case Map.get(events, key) do
         nil ->
@@ -59,7 +61,9 @@ defmodule Debouncer do
   Executes the function immediately but ignores further calls
   under the same key for the given timeout.
   """
-  def immediate2(key, fun, timeout \\ 5000) when is_integer(timeout) do
+  def immediate2(key, fun \\ nil, timeout \\ 5000) when is_integer(timeout) do
+    {fun, timeout} = ensure_function(key, fun, timeout)
+
     do_cast(fn deb = %Debouncer{events: events} ->
       case Map.get(events, key) do
         nil ->
@@ -79,7 +83,9 @@ defmodule Debouncer do
   when delay is called multipe times the timeout is reset based on the
   most recent call (t1 + timeout, t2 + timeout) etc... the fun is also updated
   """
-  def delay(key, fun, timeout \\ 5000) when is_integer(timeout) do
+  def delay(key, fun \\ nil, timeout \\ 5000) when is_integer(timeout) do
+    {fun, timeout} = ensure_function(key, fun, timeout)
+
     do_cast(fn deb ->
       new_event(deb, key, fun, timeout, nil)
     end)
@@ -91,7 +97,9 @@ defmodule Debouncer do
   when apply is called multiple times it does not affect the point
   in time when the next call is happening (t0 + timeout) but updates the fun
   """
-  def apply(key, fun, timeout \\ 5000) when is_integer(timeout) do
+  def apply(key, fun \\ nil, timeout \\ 5000) when is_integer(timeout) do
+    {fun, timeout} = ensure_function(key, fun, timeout)
+
     do_cast(fn deb = %Debouncer{events: events} ->
       case Map.get(events, key) do
         nil ->
@@ -284,5 +292,32 @@ defmodule Debouncer do
 
   defp time() do
     System.monotonic_time(:millisecond)
+  end
+
+  defp ensure_function(_key, fun, timeout) when is_function(fun, 0) and is_integer(timeout) do
+    {fun, timeout}
+  end
+
+  defp ensure_function(_key, {m, f, a}, timeout)
+       when is_atom(m) and is_atom(f) and is_list(a) and is_integer(timeout) do
+    {{m, f, a}, timeout}
+  end
+
+  defp ensure_function(key, nil, timeout) when is_function(key, 0) and is_integer(timeout) do
+    {key, timeout}
+  end
+
+  defp ensure_function(key, timeout, _timeout) when is_function(key, 0) and is_integer(timeout) do
+    {key, timeout}
+  end
+
+  defp ensure_function({m, f, a}, nil, timeout)
+       when is_atom(m) and is_atom(f) and is_list(a) and is_integer(timeout) do
+    {{m, f, a}, timeout}
+  end
+
+  defp ensure_function({m, f, a}, timeout, _timeout)
+       when is_atom(m) and is_atom(f) and is_list(a) and is_integer(timeout) do
+    {{m, f, a}, timeout}
   end
 end

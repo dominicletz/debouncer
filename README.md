@@ -52,6 +52,33 @@ end.()
 > X4
 ```
 
+## Shorthands
+
+When using Module-Function-Argument tuples as callbacks (aka `mfa`) it can be convenient to skip the key and use the mfa itself as key:
+
+```elixir
+# Call later() function immediately with the default 5 second debounce:
+Debouncer.immediate({__MODULE__, :later, []})
+
+# Call later() function immediately with 1 second debounce:
+Debouncer.immediate({__MODULE__, :later, []}, 1_000)
+
+# Same but in using method binding
+Debouncer.immediate(&later/0, 1_000)
+```
+
+**WARNING**
+
+Don't use in-place fun definitions in the shorthand, as those not work as unique-key because each call will be a different instance. So the debounce counting won't work.
+
+Example:
+
+```elixir
+# Because (`fn -> 1 end != fn -> 1 end`) don't do this:
+Debouncer.immediate(fn -> later() end, 1_000)
+```
+
+
 ## Installation
 
 The debouncer can be installed by adding `debouncer` to your list of dependencies in `mix.exs`:

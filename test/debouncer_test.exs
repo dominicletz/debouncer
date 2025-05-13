@@ -17,21 +17,30 @@ defmodule DebouncerTest do
     :ets.update_counter(:debounce_test, :first, value, {:first, 0})
   end
 
+  def incr_133() do
+    incr(133)
+  end
+
   defp get() do
     [{:first, num}] = :ets.lookup(:debounce_test, :first)
     num
   end
 
   def readme(fun) do
-    key = reset()
-    fun.(key, fn -> incr(1) end, 1000)
-    Process.sleep(500)
-    fun.(key, fn -> incr(2) end, 1000)
-    Process.sleep(800)
-    fun.(key, fn -> incr(3) end, 1000)
-    Process.sleep(900)
-    fun.(key, fn -> incr(4) end, 1000)
-    Process.sleep(1200)
+    run(fn key ->
+      fun.(key, fn -> incr(1) end, 1000)
+      Process.sleep(500)
+      fun.(key, fn -> incr(2) end, 1000)
+      Process.sleep(800)
+      fun.(key, fn -> incr(3) end, 1000)
+      Process.sleep(900)
+      fun.(key, fn -> incr(4) end, 1000)
+      Process.sleep(1200)
+    end)
+  end
+
+  def run(fun) do
+    fun.(reset())
     get()
   end
 
@@ -43,10 +52,28 @@ defmodule DebouncerTest do
   end
 
   test "mfa" do
-    reset()
-    Debouncer.immediate(:some_job, {__MODULE__, :incr, [133]}, 1000)
-    Process.sleep(500)
-    assert get() == 133
+    assert run(fn _key ->
+             Debouncer.immediate(:some_job, {__MODULE__, :incr, [133]}, 1000)
+             Process.sleep(100)
+           end) == 133
+
+    assert run(fn _key ->
+             Debouncer.immediate({__MODULE__, :incr, [133]}, 1000)
+             Process.sleep(100)
+           end) == 133
+
+    assert fn -> incr(133) end != fn -> incr(133) end
+    assert (&incr_133/0) == (&incr_133/0)
+
+    assert run(fn _key ->
+             Debouncer.immediate(&incr_133/0, 1000)
+             Process.sleep(100)
+           end) == 133
+
+    assert run(fn _key ->
+             Debouncer.immediate(fn -> incr(133) end)
+             Process.sleep(100)
+           end) == 133
   end
 
   def cancel(fun) do
