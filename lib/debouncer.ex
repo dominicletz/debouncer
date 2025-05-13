@@ -262,7 +262,7 @@ defmodule Debouncer do
     worker =
       case Map.get(workers, key) do
         nil ->
-          pid = spawn(fun)
+          pid = spawn_worker(fun)
           Process.monitor(pid)
           {pid, fun, false}
 
@@ -272,6 +272,14 @@ defmodule Debouncer do
       end
 
     %Debouncer{deb | workers: Map.put(workers, key, worker)}
+  end
+
+  defp spawn_worker(fun) when is_function(fun, 0) do
+    spawn(fun)
+  end
+
+  defp spawn_worker({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a) do
+    spawn(m, f, a)
   end
 
   defp time() do

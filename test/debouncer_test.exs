@@ -13,7 +13,7 @@ defmodule DebouncerTest do
     make_ref()
   end
 
-  defp incr(value) do
+  def incr(value) do
     :ets.update_counter(:debounce_test, :first, value, {:first, 0})
   end
 
@@ -40,6 +40,13 @@ defmodule DebouncerTest do
     assert readme(&Debouncer.immediate/3) == 1 + 2 + 3 + 4
     assert readme(&Debouncer.immediate2/3) == 1 + 3
     assert readme(&Debouncer.delay/3) == 4
+  end
+
+  test "mfa" do
+    reset()
+    Debouncer.immediate(:some_job, {__MODULE__, :incr, [133]}, 1000)
+    Process.sleep(500)
+    assert get() == 133
   end
 
   def cancel(fun) do
