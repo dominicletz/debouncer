@@ -35,7 +35,6 @@ defmodule Debouncer do
 
   defstruct events: %{}, workers: %{}
 
-  @spec immediate(term(), (-> any()), non_neg_integer()) :: :ok
   @doc """
   Executes the function immediately but blocks any further call
   under the same key for the given timeout.
@@ -56,7 +55,6 @@ defmodule Debouncer do
     end)
   end
 
-  @spec immediate2(term(), (-> any()), non_neg_integer()) :: :ok
   @doc """
   Executes the function immediately but ignores further calls
   under the same key for the given timeout.
@@ -77,7 +75,6 @@ defmodule Debouncer do
     end)
   end
 
-  @spec delay(term(), (-> any()), non_neg_integer()) :: :ok
   @doc """
   Executes the function after the specified timeout t0 + timeout,
   when delay is called multipe times the timeout is reset based on the
@@ -91,7 +88,6 @@ defmodule Debouncer do
     end)
   end
 
-  @spec apply(term(), (-> any()), non_neg_integer()) :: :ok
   @doc """
   Executes the function after the specified timeout t0 + timeout,
   when apply is called multiple times it does not affect the point
@@ -119,7 +115,6 @@ defmodule Debouncer do
     %Debouncer{deb | events: events}
   end
 
-  @spec cancel(term()) :: :ok
   @doc """
   Deletes the latest event if it hasn't triggered yet.
   """
@@ -136,7 +131,6 @@ defmodule Debouncer do
     end)
   end
 
-  @spec worker(any()) :: pid() | nil
   @doc """
   Returns the pid of an active job worker or nil if no such job is scheduled.
   Per key the debouncer never starts more than one process at the same time.
@@ -159,7 +153,6 @@ defmodule Debouncer do
   end
 
   @doc false
-  @spec start_link() :: :ignore | {:error, any} | {:ok, pid}
   def start_link() do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
