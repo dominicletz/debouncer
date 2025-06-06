@@ -8,7 +8,7 @@ defmodule DebouncerTest do
     :ok
   end
 
-  defp reset() do
+  defp reset do
     :ets.insert(:debounce_test, {:first, 0})
     make_ref()
   end
@@ -17,11 +17,11 @@ defmodule DebouncerTest do
     :ets.update_counter(:debounce_test, :first, value, {:first, 0})
   end
 
-  def incr_133() do
+  def incr_133 do
     incr(133)
   end
 
-  defp get() do
+  defp get do
     [{:first, num}] = :ets.lookup(:debounce_test, :first)
     num
   end

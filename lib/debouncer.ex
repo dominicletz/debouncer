@@ -153,7 +153,7 @@ defmodule Debouncer do
   end
 
   @doc false
-  def start_link() do
+  def start_link do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
@@ -224,35 +224,39 @@ defmodule Debouncer do
       ts ->
         hd(:ets.take(__MODULE__, ts))
         |> elem(1)
-        |> Enum.reduce(deb, fn key, deb = %Debouncer{events: events} ->
-          case Map.get(events, key) do
-            # Handling apply(), immediate(), immediate2()
-            {^ts, nil, _timeout} ->
-              events = Map.delete(events, key)
-              %Debouncer{deb | events: events}
-
-            # Executing and putting marker for next event
-            {^ts, fun, timeout} when is_integer(timeout) ->
-              calltime = ts + timeout
-              ets_insert(calltime, key)
-              events = Map.put(events, key, {calltime, nil, timeout})
-
-              %Debouncer{deb | events: events}
-              |> execute(key, fun)
-
-            # delay() goes here
-            {^ts, fun, nil} ->
-              events = Map.delete(events, key)
-
-              %Debouncer{deb | events: events}
-              |> execute(key, fun)
-
-            _ ->
-              deb
-          end
-        end)
+        |> reduce_events(deb, ts)
         |> update(now)
     end
+  end
+
+  defp reduce_events(events, deb, ts) do
+    Enum.reduce(events, deb, fn key, deb = %Debouncer{events: events} ->
+      case Map.get(events, key) do
+        # Handling apply(), immediate(), immediate2()
+        {^ts, nil, _timeout} ->
+          events = Map.delete(events, key)
+          %Debouncer{deb | events: events}
+
+        # Executing and putting marker for next event
+        {^ts, fun, timeout} when is_integer(timeout) ->
+          calltime = ts + timeout
+          ets_insert(calltime, key)
+          events = Map.put(events, key, {calltime, nil, timeout})
+
+          %Debouncer{deb | events: events}
+          |> execute(key, fun)
+
+        # delay() goes here
+        {^ts, fun, nil} ->
+          events = Map.delete(events, key)
+
+          %Debouncer{deb | events: events}
+          |> execute(key, fun)
+
+        _ ->
+          deb
+      end
+    end)
   end
 
   defp execute(deb, _key, nil) do
@@ -283,7 +287,7 @@ defmodule Debouncer do
     spawn(m, f, a)
   end
 
-  defp time() do
+  defp time do
     System.monotonic_time(:millisecond)
   end
 
