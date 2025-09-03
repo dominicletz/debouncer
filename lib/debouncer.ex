@@ -280,11 +280,16 @@ defmodule Debouncer do
   end
 
   defp spawn_worker(fun) when is_function(fun, 0) do
-    spawn(fun)
+    spawn(__MODULE__, :work, [fun])
   end
 
   defp spawn_worker({m, f, a}) when is_atom(m) and is_atom(f) and is_list(a) do
     spawn(m, f, a)
+  end
+
+  @doc false
+  def work(fun) do
+    fun.()
   end
 
   defp time do
