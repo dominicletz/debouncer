@@ -33,7 +33,7 @@ defmodule Debouncer do
   ```
   """
 
-  defstruct events: %{}, workers: %{}
+  defstruct events: %{}, workers: %{}, worker_monitors: %{}
 
   @doc """
   Executes the function immediately but blocks any further call
@@ -194,17 +194,20 @@ defmodule Debouncer do
     {:noreply, update(deb, time())}
   end
 
-  def handle_info({:DOWN, _ref, :process, end_pid, _reason}, deb = %Debouncer{workers: workers}) do
-    {key, {_pid, fun, repeat?}} =
-      Enum.find(workers, fn {_key, {pid, _fun, _repeat?}} -> pid == end_pid end)
-
+  def handle_info(
+        {:DOWN, ref, :process, end_pid, _reason},
+        deb = %Debouncer{workers: workers, worker_monitors: worker_monitors}
+      ) do
+    key = Map.get(worker_monitors, ref)
+    {^end_pid, fun, repeat?} = Map.get(workers, key)
     workers = Map.delete(workers, key)
+    worker_monitors = Map.delete(worker_monitors, ref)
 
     if map_size(workers) == 0 do
       :erlang.garbage_collect()
     end
 
-    deb = %Debouncer{deb | workers: workers}
+    deb = %Debouncer{deb | workers: workers, worker_monitors: worker_monitors}
 
     if repeat? do
       {:noreply, execute(deb, key, fun)}
@@ -263,20 +266,20 @@ defmodule Debouncer do
     deb
   end
 
-  defp execute(deb = %Debouncer{workers: workers}, key, fun) do
-    worker =
-      case Map.get(workers, key) do
-        nil ->
-          pid = spawn_worker(fun)
-          Process.monitor(pid)
-          {pid, fun, false}
+  defp execute(deb = %Debouncer{workers: workers, worker_monitors: worker_monitors}, key, fun) do
+    case Map.get(workers, key) do
+      nil ->
+        pid = spawn_worker(fun)
+        ref = Process.monitor(pid)
+        worker_monitors = Map.put(worker_monitors, ref, key)
+        worker = {pid, fun, false}
+        %Debouncer{deb | workers: Map.put(workers, key, worker), worker_monitors: worker_monitors}
 
-        {pid, _fun, _repeat?} ->
-          # Execute this after the current job finishes
-          {pid, fun, true}
-      end
-
-    %Debouncer{deb | workers: Map.put(workers, key, worker)}
+      {pid, _fun, _repeat?} ->
+        # Execute this after the current job finishes
+        worker = {pid, fun, true}
+        %Debouncer{deb | workers: Map.put(workers, key, worker), worker_monitors: worker_monitors}
+    end
   end
 
   defp spawn_worker(fun) when is_function(fun, 0) do
