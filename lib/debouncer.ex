@@ -139,6 +139,15 @@ defmodule Debouncer do
     GenServer.call(__MODULE__, {:worker, key})
   end
 
+  @doc """
+  Returns a map of all active job workers.
+  """
+  def workers() do
+    GenServer.call(__MODULE__, :workers)
+    |> Enum.map(fn {key, {pid, _fun, _repeat?}} -> {key, pid} end)
+    |> Enum.into(%{})
+  end
+
   ######################## CALLBACKS       ####################
   @doc false
   def start(_type, _args) do
@@ -171,6 +180,10 @@ defmodule Debouncer do
 
   def handle_cast(fun, state) do
     {:noreply, fun.(state)}
+  end
+
+  def handle_call(:workers, _from, state = %Debouncer{workers: workers}) do
+    {:reply, workers, state}
   end
 
   def handle_call({:worker, key}, _from, state = %Debouncer{workers: workers}) do
