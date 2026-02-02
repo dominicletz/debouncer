@@ -24,13 +24,19 @@ Debouncer module to reduce frequency of function calls to alerts, updates and si
 ## Behaviour Graph
 
 ```
-EVENT        X1---X2------X3-------X4----------
+EVENT        E1---E2------E3-------E4----------
 TIMEOUT      ----------|----------|----------|-
 ===============================================
-apply()      ----------X2---------X3---------X4
-immediate()  X1--------X2---------X3---------X4
-immediate2() X1-----------X3-------------------
-delay()      --------------------------------X4
+apply()      ----------E2---------E3---------E4
+immediate()  E1--------E2---------E3---------E4
+immediate2() E1-----------E3-------------------
+delay()      --------------------------------E4
+
+USE CASE
+apply()      - Search input field
+immediate()  - Send email now, but not too freq
+immediate2() - Game gun with reload time
+delay()      - Schedule post-processing job
 ```
 
 This graph represents when the different variants fire an event respectively on a timeline. In code the first line would look like this:
@@ -86,27 +92,13 @@ The debouncer can be installed by adding `debouncer` to your list of dependencie
 ```elixir
 def deps do
   [
-    {:debouncer, "~> 0.1"}
+    {:debouncer, "~> 1.0"}
   ]
 end
 ```
-
-The debouncer is an application and will start a GenServer to trigger the events. To include the Application in your release add it to your extra applications:
-
-```elixir
-  def application do
-    [
-      mod: {Your.Application, []},
-      extra_applications: [:debouncer]
-    ]
-  end
-
-```
-
-If it's not started it will try to start itself on usage.
 
 The docs can be found at [https://hexdocs.pm/debouncer](https://hexdocs.pm/debouncer).
 
 ## Remarks
 
-The `delay()` behaviour should be the same as in Michal Muskalas Debounce implementation https://github.com/michalmuskala/debounce
+The `delay()` behaviour is the same as in Michal Muskalas Debounce implementation https://github.com/michalmuskala/debounce
