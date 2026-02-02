@@ -140,12 +140,22 @@ defmodule Debouncer do
   end
 
   @doc """
-  Returns a map of all active job workers.
+  Returns a map of all active job workers. This is useful for debugging of
+  active workers and profiling.
   """
-  def workers() do
+  def workers do
     GenServer.call(__MODULE__, :workers)
     |> Enum.map(fn {key, {pid, _fun, _repeat?}} -> {key, pid} end)
     |> Enum.into(%{})
+  end
+
+  @doc """
+  Returns a map of all events. This is useful for debugging of active events and
+  profiling.
+  """
+  def events do
+    # only select the first element of the tuple
+    :ets.tab2list(__MODULE__) |> Enum.map(fn {_ts, keys} -> keys end) |> List.flatten()
   end
 
   ######################## CALLBACKS       ####################

@@ -210,6 +210,7 @@ defmodule DebouncerTest do
     pid = Debouncer.worker(:some_job)
     assert is_pid(pid)
     assert %{:some_job => ^pid} = Debouncer.workers()
+    assert [:some_job] = Debouncer.events()
     send(Debouncer.worker(:some_job), :run)
     assert_receive :finish
   end

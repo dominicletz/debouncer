@@ -9,8 +9,8 @@ jobs:
     - name: Setup elixir
       uses: erlef/setup-beam@v1
       with:
-        otp-version: 27.3
-        elixir-version: 1.18.2
+        otp-version: latest
+        elixir-version: latest
 
     - uses: actions/checkout@v1
     - run: |
