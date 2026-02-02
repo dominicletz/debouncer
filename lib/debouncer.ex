@@ -332,10 +332,12 @@ defmodule Debouncer do
   end
 
   defp ensure_function(key, nil, timeout) when is_function(key, 0) and is_integer(timeout) do
+    check_function(key)
     {key, timeout}
   end
 
   defp ensure_function(key, timeout, _timeout) when is_function(key, 0) and is_integer(timeout) do
+    check_function(key)
     {key, timeout}
   end
 
@@ -347,5 +349,14 @@ defmodule Debouncer do
   defp ensure_function({m, f, a}, timeout, _timeout)
        when is_atom(m) and is_atom(f) and is_list(a) and is_integer(timeout) do
     {{m, f, a}, timeout}
+  end
+
+  defp check_function(key) do
+    info = :erlang.fun_info(key)
+
+    if info[:type] == :local and String.contains?("#{info[:name]}", "-fun-") do
+      raise FunctionClauseError,
+            "In-place function definitions can not be used in the shorthand, as those create a different key on every call. So the debounce counting won't work."
+    end
   end
 end

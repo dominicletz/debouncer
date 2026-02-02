@@ -71,11 +71,14 @@ Debouncer.immediate({__MODULE__, :later, []}, 1_000)
 
 # Same but in using method binding
 Debouncer.immediate(&later/0, 1_000)
+
+# Same but in using method binding
+Debouncer.immediate(&later/0, 1_000)
 ```
 
-**WARNING**
+**NOTE**
 
-Don't use in-place fun definitions in the shorthand, as those not work as unique-key because each call will be a different instance. So the debounce counting won't work.
+Do not use in-place fun definitions can not be used in the shorthand, as those create a different key on every.
 
 Example:
 

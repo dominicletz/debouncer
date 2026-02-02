@@ -53,7 +53,7 @@ defmodule DebouncerTest do
 
   test "mfa" do
     assert run(fn _key ->
-             Debouncer.immediate(:some_job, {__MODULE__, :incr, [133]}, 1000)
+             Debouncer.immediate(:some_job_1, {__MODULE__, :incr, [133]}, 1000)
              Process.sleep(100)
            end) == 133
 
@@ -71,7 +71,7 @@ defmodule DebouncerTest do
            end) == 133
 
     assert run(fn _key ->
-             Debouncer.immediate(fn -> incr(133) end)
+             Debouncer.immediate(:new_fun, fn -> incr(133) end)
              Process.sleep(100)
            end) == 133
   end
@@ -213,5 +213,26 @@ defmodule DebouncerTest do
     assert [:some_job] = Debouncer.events()
     send(Debouncer.worker(:some_job), :run)
     assert_receive :finish
+  end
+
+  test "no in place function in shorthand" do
+    a = fn -> incr(1) end
+    b = fn -> incr(1) end
+    assert a != b
+
+    a = &incr/0
+    b = &incr/0
+    assert a == b
+
+    assert Debouncer.immediate({__MODULE__, :incr, [1]}, 1000) == :ok
+    assert Debouncer.immediate(&incr/0, 1000) == :ok
+
+    assert_raise FunctionClauseError, fn ->
+      Debouncer.immediate(fn -> incr(1) end, 1000)
+    end
+  end
+
+  def incr() do
+    incr(1)
   end
 end
