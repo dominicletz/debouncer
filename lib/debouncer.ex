@@ -355,8 +355,7 @@ defmodule Debouncer do
     info = :erlang.fun_info(key)
 
     if info[:type] == :local and String.contains?("#{info[:name]}", "-fun-") do
-      raise FunctionClauseError,
-            "In-place function definitions can not be used in the shorthand, as those create a different key on every call. So the debounce counting won't work."
+      raise "In-place function definitions can not be used in the shorthand, as those create a different key on every call. So the debounce counting won't work."
     end
   end
 end

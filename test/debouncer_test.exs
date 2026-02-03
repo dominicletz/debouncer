@@ -227,7 +227,7 @@ defmodule DebouncerTest do
     assert Debouncer.immediate({__MODULE__, :incr, [1]}, 1000) == :ok
     assert Debouncer.immediate(&incr/0, 1000) == :ok
 
-    assert_raise FunctionClauseError, fn ->
+    assert_raise RuntimeError, fn ->
       Debouncer.immediate(fn -> incr(1) end, 1000)
     end
   end
