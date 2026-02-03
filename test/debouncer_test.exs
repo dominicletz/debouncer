@@ -232,7 +232,7 @@ defmodule DebouncerTest do
     end
   end
 
-  def incr() do
+  def incr do
     incr(1)
   end
 end
