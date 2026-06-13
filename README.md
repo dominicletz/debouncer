@@ -104,4 +104,14 @@ The docs can be found at [https://hexdocs.pm/debouncer](https://hexdocs.pm/debou
 
 ## Remarks
 
+Scheduling uses a dedicated `Debouncer.Timer` process that sleeps with `receive after` until the next deadline (or until a new event is scheduled). There is no fixed polling interval, so idle systems incur no timer wakeups and short timeouts fire with millisecond precision.
+
+Compare before/after locally:
+
+```bash
+mix bench | tee bench/after.txt
+```
+
+On the previous polling implementation, `mix bench` typically showed non-zero idle Debouncer reductions and higher p95/max fire slack at 100ms timeouts.
+
 The `delay()` behaviour is the same as in Michal Muskalas Debounce implementation https://github.com/michalmuskala/debounce
