@@ -110,9 +110,28 @@ defmodule Debouncer do
 
   defp new_event(deb = %Debouncer{events: events}, key, fun, timeout, stall) do
     calltime = time() + timeout
-    ets_insert(calltime, key)
+
+    old_calltime =
+      case Map.get(events, key) do
+        {ts, _, _} -> ts
+        nil -> nil
+      end
+
     events = Map.put(events, key, {calltime, fun, stall})
-    %Debouncer{deb | events: events}
+    deb = %Debouncer{deb | events: events}
+
+    case old_calltime do
+      nil ->
+        Debouncer.Timer.schedule(calltime, key)
+
+      ^calltime ->
+        :ok
+
+      old_ts ->
+        Debouncer.Timer.reschedule(key, old_ts, calltime)
+    end
+
+    deb
   end
 
   @doc """
@@ -124,9 +143,9 @@ defmodule Debouncer do
         nil ->
           deb
 
-        {calltime, _fun, timeout} ->
-          events = Map.put(events, key, {calltime, nil, timeout})
-          %Debouncer{deb | events: events}
+        {_calltime, _fun, _timeout} ->
+          Debouncer.Timer.cancel(key)
+          %Debouncer{deb | events: Map.delete(events, key)}
       end
     end)
   end
@@ -154,21 +173,21 @@ defmodule Debouncer do
   profiling.
   """
   def events do
-    # only select the first element of the tuple
-    :ets.tab2list(__MODULE__) |> Enum.map(fn {_ts, keys} -> keys end) |> List.flatten()
+    Debouncer.Timer.scheduled_keys()
   end
 
   ######################## CALLBACKS       ####################
   @doc false
   def start(_type, _args) do
-    import Supervisor.Spec, warn: false
+    children = [
+      {Debouncer.Timer, [debouncer: Debouncer]},
+      %{
+        id: Debouncer,
+        start: {Debouncer, :start_link, []}
+      }
+    ]
 
-    child = %{
-      id: Debouncer,
-      start: {Debouncer, :start_link, []}
-    }
-
-    Supervisor.start_link([child], strategy: :one_for_one, name: Debouncer.Supervisor)
+    Supervisor.start_link(children, strategy: :one_for_one, name: Debouncer.Supervisor)
   end
 
   @doc false
@@ -178,8 +197,6 @@ defmodule Debouncer do
 
   @doc false
   def init(_arg) do
-    {:ok, _} = :timer.send_interval(100, :tick)
-    __MODULE__ = :ets.new(__MODULE__, [{:keypos, 1}, :ordered_set, :named_table])
     {:ok, %Debouncer{}}
   end
 
@@ -188,8 +205,17 @@ defmodule Debouncer do
     GenServer.cast(__MODULE__, fun)
   end
 
-  def handle_cast(fun, state) do
+  def handle_cast({:due, ts, keys}, deb) do
+    {:noreply, reduce_events(keys, deb, ts)}
+  end
+
+  def handle_cast(fun, state) when is_function(fun, 1) do
     {:noreply, fun.(state)}
+  end
+
+  def handle_call(:pending_schedules, _from, state = %Debouncer{events: events}) do
+    schedules = for {key, {calltime, _fun, _stall}} <- events, do: {key, calltime}
+    {:reply, schedules, state}
   end
 
   def handle_call(:workers, _from, state = %Debouncer{workers: workers}) do
@@ -204,17 +230,6 @@ defmodule Debouncer do
       {pid, _fun, _repeat?} ->
         {:reply, pid, state}
     end
-  end
-
-  defp ets_insert(calltime, key) do
-    case :ets.lookup(__MODULE__, calltime) do
-      [] -> :ets.insert(__MODULE__, {calltime, [key]})
-      [{_, keys}] -> :ets.insert(__MODULE__, {calltime, [key | keys]})
-    end
-  end
-
-  def handle_info(:tick, deb) do
-    {:noreply, update(deb, time())}
   end
 
   def handle_info(
@@ -239,22 +254,6 @@ defmodule Debouncer do
     end
   end
 
-  defp update(deb, now) do
-    case :ets.first(__MODULE__) do
-      :"$end_of_table" ->
-        deb
-
-      ts when ts > now ->
-        deb
-
-      ts ->
-        hd(:ets.take(__MODULE__, ts))
-        |> elem(1)
-        |> reduce_events(deb, ts)
-        |> update(now)
-    end
-  end
-
   defp reduce_events(events, deb, ts) do
     Enum.reduce(events, deb, fn key, deb = %Debouncer{events: events} ->
       case Map.get(events, key) do
@@ -266,7 +265,7 @@ defmodule Debouncer do
         # Executing and putting marker for next event
         {^ts, fun, timeout} when is_integer(timeout) ->
           calltime = ts + timeout
-          ets_insert(calltime, key)
+          Debouncer.Timer.schedule(calltime, key)
           events = Map.put(events, key, {calltime, nil, timeout})
 
           %Debouncer{deb | events: events}
