@@ -24,8 +24,8 @@ end
 defmodule Debouncer.TimerTest do
   use ExUnit.Case
 
-  alias Debouncer.TimerTest.Receiver
   alias Debouncer.Timer, as: DebouncerTimer
+  alias Debouncer.TimerTest.Receiver
 
   setup do
     id = System.unique_integer([:positive])
