@@ -193,6 +193,38 @@ defmodule DebouncerTest do
     assert ten_pauses(&Debouncer.immediate2/3) == 6
   end
 
+  test "fires within tolerance of short timeout" do
+    parent = self()
+    timeout = 80
+    trials = 20
+
+    slacks =
+      for i <- 1..trials do
+        key = {:precision, i}
+        scheduled_at = System.monotonic_time(:millisecond)
+
+        Debouncer.apply(
+          key,
+          fn ->
+            send(parent, {:fired, key, System.monotonic_time(:millisecond)})
+          end,
+          timeout
+        )
+
+        receive do
+          {:fired, ^key, fired_at} -> fired_at - (scheduled_at + timeout)
+        after
+          timeout + 200 -> flunk("timeout waiting for debounced fire")
+        end
+      end
+
+    avg = Enum.sum(slacks) / length(slacks)
+    p95 = slacks |> Enum.sort() |> Enum.at(round(0.95 * (trials - 1)))
+
+    assert avg < 20, "average slack #{avg}ms too high for event-driven timer"
+    assert p95 < 30, "p95 slack #{p95}ms too high for event-driven timer"
+  end
+
   test "worker" do
     here = self()
 
