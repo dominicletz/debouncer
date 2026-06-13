@@ -25,6 +25,7 @@ defmodule Debouncer.MixProject do
         extras: ["README.md"]
       ],
       aliases: [
+        bench: ["run bench/timer_comparison.exs"],
         lint: ["format --check-formatted", "credo --strict", "dialyzer"]
       ]
     ]
