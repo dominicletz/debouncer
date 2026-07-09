@@ -104,7 +104,7 @@ The docs can be found at [https://hexdocs.pm/debouncer](https://hexdocs.pm/debou
 
 ## Remarks
 
-Scheduling uses a dedicated `Debouncer.Timer` process that sleeps with `receive after` until the next deadline (or until a new event is scheduled). There is no fixed polling interval, so idle systems incur no timer wakeups and short timeouts fire with millisecond precision.
+Scheduling uses a dedicated timer process that sleeps with `receive after` until the next deadline (or until a new event is scheduled). There is no fixed polling interval, so idle systems incur no timer wakeups and short timeouts fire with millisecond precision.
 
 Compare before/after locally:
 
