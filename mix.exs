@@ -42,7 +42,7 @@ defmodule Debouncer.MixProject do
   defp deps do
     [
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false}
     ]
   end
