@@ -19,4 +19,5 @@ jobs:
         mix compile --warnings-as-errors
         mix format --check-formatted
         mix lint
+        mix docs --warnings-as-errors
         mix test
